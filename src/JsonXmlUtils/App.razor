@@ -1,0 +1,269 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+@using JsonXmlUtils
+@using Microsoft.JSInterop
+
+@inject IJSRuntime jsRuntime
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">JsonXmlUtils</h5>
+                    <p class="card-text">
+                        Instructions:<br />
+                        Select source file or put as text<br />
+                        Add at least one processing step<br />
+                        Select result type<br />
+                        Click "Convert"<br />
+                    </p>
+                    <a class="btn btn-primary" href="https://github.com/srumyantsev/json-xml-utils" target="_blank" role="button">View on GitHub</a>
+                </div>
+            </div>
+            <fieldset class="border p-2">
+                <legend class="w-auto">Source</legend>
+                @*https://dev.to/j_sakamoto/workaround-how-to-two-way-data-binding-of-radio-button-input-with-blazor-spa-v050-31fd*@
+                <label>
+                    <input type="radio" name="source-type" checked="@(SelectedSourceType == TextOrFile.Text)" @onchange="@(() => SelectedSourceType = TextOrFile.Text)" /> Text
+                </label>
+                <label>
+                    <input type="radio" name="source-type" checked="@(SelectedSourceType == TextOrFile.File)" @onchange="@(() => SelectedSourceType = TextOrFile.File)" /> File
+                </label>
+                @if (SelectedSourceType == TextOrFile.Text)
+                {
+                    <div>
+                        <textarea class="form-control" @bind="@SourceText"></textarea>
+                    </div>
+                }
+                else
+                {
+                    <div>
+                        @*https://remibou.github.io/Upload-file-with-Blazor/*@
+                        <input class="form-control-file" type="file" id="source-file" />
+                    </div>
+                }
+            </fieldset>
+            <fieldset class="border p-2">
+                <legend class="w-auto">Available processing steps</legend>
+                <div class="form-inline">
+                    <select class="col-6 form-control" @bind="SelectedProcessStepToAdd">
+                        @foreach (ProcessingStep processingStep in Enum.GetValues(typeof(ProcessingStep)))
+                        {
+                            <option value="@processingStep">@processingStep</option>
+                        }
+                    </select>
+                    <button class="col-6 btn btn-primary" @onclick="@(() => AddProcessStep(SelectedProcessStepToAdd))">Add</button>
+                </div>
+            </fieldset>
+            <fieldset class="border p-2">
+                <legend class="w-auto">Selected processing steps</legend>
+                <div>
+                    @if (ProcessSteps.Count == 0)
+                    {
+                        <div>No steps selected</div>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @for (int i = 0; i < ProcessSteps.Count; i++)
+                            {
+                                int processingStepIndex = i; //https://docs.microsoft.com/ru-ru/aspnet/core/blazor/components?view=aspnetcore-3.0#lambda-expressions
+
+                                <li class="list-group-item d-flex justify-content-between">@ProcessSteps[processingStepIndex] <button class="btn btn-primary" @onclick="@(() => DeleteProcessStep(processingStepIndex))">Delete</button></li>
+
+                            }
+                        </ul>
+                    }
+                </div>
+            </fieldset>
+            <fieldset class="border p-2">
+                <legend class="w-auto">Result type</legend>
+                <select class="form-control" @onchange="@((ChangeEventArgs __e) => { SelectedResultType = (ResultType)Enum.Parse(typeof(ResultType), (string)__e.Value); ClearResults(); })">
+                    @foreach (ResultType resultType in Enum.GetValues(typeof(ResultType)))
+                    {
+                        <option value="@resultType">@resultType</option>
+                    }
+                </select>
+            </fieldset>
+            <fieldset class="border p-2">
+                <legend class="w-auto">Convert</legend>
+                <button class="btn btn-primary btn-lg btn-block" @onclick="ExecuteConvert">Convert</button>
+            </fieldset>
+            <fieldset class="border p-2">
+                <legend class="w-auto">Result</legend>
+                @if (SelectedResultType == ResultType.Text)
+                {
+                    if (!string.IsNullOrEmpty(ResultText))
+                    {
+                        <div>
+                            <textarea class="form-control">@ResultText</textarea>
+                        </div>
+                    }
+                    else
+                    {
+                        <div>No result text</div>
+                    }
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(ResultFileContent))
+                    {
+                        <div>
+                            <a href="data:application/octet-stream;charset=utf-8;base64,@ResultFileContent" download="result@(ResultFileExtension)">Download result file</a>
+                        </div>
+                    }
+                    else
+                    {
+                        <div>No result file</div>
+                    }
+                }
+            </fieldset>
+        </div>
+    </div>
+
+@code {
+    ProcessingStep SelectedProcessStepToAdd;
+    TextOrFile SelectedSourceType;
+    ResultType SelectedResultType;
+    string SourceText;
+    string ResultText;
+    string ResultFileContent;
+    string ResultFileExtension;
+    List<ProcessingStep> ProcessSteps = new List<ProcessingStep>();
+
+    void AddProcessStep(ProcessingStep processingStep)
+    {
+        ProcessSteps.Add(processingStep);
+    }
+
+    void DeleteProcessStep(int processingStepIndex)
+    {
+        ProcessSteps.RemoveAt(processingStepIndex);
+    }
+
+    async Task ExecuteConvert()
+    {
+        try
+        {
+            await ConvertImplementation();
+        }
+        catch (Exception exception)
+        {
+            await Alert($"Can't convert. Error: {exception.Message}");
+        }
+    }
+
+    async Task ConvertImplementation()
+    {
+        ClearResults();
+
+        if (ProcessSteps.Count == 0)
+        {
+            throw new Exception("No processing steps selected");
+        }
+
+        ContentContainer contentContainer;
+        if (SelectedSourceType == TextOrFile.Text)
+        {
+            if (string.IsNullOrEmpty(SourceText))
+            {
+                throw new Exception("Source text is empty");
+            }
+            contentContainer = new ContentContainer(SourceText);
+        }
+        else
+        {
+            //https://remibou.github.io/Upload-file-with-Blazor/
+            string fileContent = (await jsRuntime.InvokeAsync<FileContentContainer>("readUploadedFileAsText", "source-file"))?.Content;
+            if (string.IsNullOrEmpty(fileContent))
+            {
+                throw new Exception("Source file not selected");
+            }
+            contentContainer = new ContentContainer(Convert.FromBase64String(fileContent));
+        }
+
+        for (int i = 0; i < ProcessSteps.Count; i++)
+        {
+            try
+            {
+                contentContainer.ExecuteProcessStep(ProcessSteps[i]);
+            }
+            catch (Exception ex)
+            {
+                await Alert($"Error at step #{i + 1} ({ProcessSteps[i]}).{Environment.NewLine}Error: {ex.Message}");
+            }
+        }
+
+        if (SelectedResultType == ResultType.Text)
+        {
+            ResultText = contentContainer.ValueString;
+        }
+        else
+        {
+            ResultFileContent = Convert.ToBase64String(contentContainer.Value);
+            switch (SelectedResultType)
+            {
+                case ResultType.BinaryFile:
+                    ResultFileExtension = null;
+                    break;
+                case ResultType.TxtFile:
+                    ResultFileExtension = ".txt";
+                    break;
+                case ResultType.CsvFile:
+                    ResultFileExtension = ".csv";
+                    break;
+                case ResultType.PdfFile:
+                    ResultFileExtension = ".pdf";
+                    break;
+                case ResultType.XmlFile:
+                    ResultFileExtension = ".xml";
+                    break;
+                case ResultType.DocxFile:
+                    ResultFileExtension = ".docx";
+                    break;
+                case ResultType.XlsxFile:
+                    ResultFileExtension = ".xlsx";
+                    break;
+                case ResultType.JsonFile:
+                    ResultFileExtension = ".json";
+                    break;
+            }
+        }
+    }
+
+    void ClearResults()
+    {
+        ResultText = null;
+        ResultFileContent = null;
+        ResultFileExtension = null;
+    }
+
+    async Task Alert(string message)
+    {
+        await jsRuntime.InvokeVoidAsync("alert", $"Can't convert. Error: {message}");
+    }
+
+    enum TextOrFile
+    {
+        Text,
+        File
+    }
+
+    enum ResultType
+    {
+        Text,
+        BinaryFile,
+        TxtFile,
+        CsvFile,
+        PdfFile,
+        XmlFile,
+        DocxFile,
+        XlsxFile,
+        JsonFile,
+    }
+
+    public class FileContentContainer
+    {
+        //Name "Content" is important, because must reflect name from JS object which will be passed back to Blazor
+        public string Content { get; set; }
+    }
+}

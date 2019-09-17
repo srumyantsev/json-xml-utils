@@ -1,0 +1,28 @@
+<Project>
+  <Target Name="BlazorCompleteStandalonePublish2" AfterTargets="FileSystemPublish">
+    <PropertyGroup>
+      <JsonXmlUtilsPublishFolderSource>$(PublishDir)$(BlazorPublishDistDir)</JsonXmlUtilsPublishFolderSource>
+      <JsonXmlUtilsPublishFolderTarget>$(SolutionDir)..\docs\</JsonXmlUtilsPublishFolderTarget>
+    </PropertyGroup>
+    <ItemGroup>
+      <JsonXmlFilesToPublish Include="$(JsonXmlUtilsPublishFolderSource)\**\*" />
+    </ItemGroup>
+    
+    <Message Text="Deleting $(JsonXmlUtilsPublishFolderTarget)" />
+    <RemoveDir Directories="$(JsonXmlUtilsPublishFolderTarget)" />
+    
+    <Message Text="Copying from $(JsonXmlUtilsPublishFolderSource) to $(JsonXmlUtilsPublishFolderTarget)" />
+    <Copy SourceFiles="@(JsonXmlFilesToPublish)"
+          DestinationFiles="@(JsonXmlFilesToPublish->'$(JsonXmlUtilsPublishFolderTarget)%(RecursiveDir)%(Filename)%(Extension)'->Replace('_framework', 'framework')->Replace('_bin', 'bin'))" />
+
+    <Message Text="Fixing '_framework' $(JsonXmlUtilsPublishFolderTarget)index.html; $(JsonXmlUtilsPublishFolderTarget)framework\blazor.boot.json; $(JsonXmlUtilsPublishFolderTarget)framework\blazor.server.js; $(JsonXmlUtilsPublishFolderTarget)framework\blazor.webassembly.js" />
+    <FileUpdate Files="$(JsonXmlUtilsPublishFolderTarget)index.html; $(JsonXmlUtilsPublishFolderTarget)framework\blazor.boot.json; $(JsonXmlUtilsPublishFolderTarget)framework\blazor.server.js; $(JsonXmlUtilsPublishFolderTarget)framework\blazor.webassembly.js"
+                Regex="_framework/"
+                ReplacementText="framework/" />
+
+    <Message Text="Fixing '_bin' $(JsonXmlUtilsPublishFolderTarget)framework\blazor.webassembly.js" />
+    <FileUpdate Files="$(JsonXmlUtilsPublishFolderTarget)framework\blazor.webassembly.js"
+                Regex="_bin/"
+                ReplacementText="bin/" />
+  </Target>
+</Project>
