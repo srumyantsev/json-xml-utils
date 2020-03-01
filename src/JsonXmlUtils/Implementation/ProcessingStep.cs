@@ -5,6 +5,7 @@
 		EncodeBase64,
 		DecodeXml,
 		EncodeXml,
+		ButifyXml,
 		ButifyJson,
 		HtmlDecode,
 		HtmlEncode,

@@ -1,31 +1,41 @@
 ﻿using System;
+using System.IO;
 using System.Net;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace JsonXmlUtils {
-	public class ContentContainer {
+namespace JsonXmlUtils
+{
+	public class ContentContainer
+	{
 		public static Action<string> LogAction;
 
-		public ContentContainer(string value) {
+		public ContentContainer(string value)
+		{
 			Value = Encoding.GetBytes(value);
 		}
 
-		public ContentContainer(byte[] value) {
+		public ContentContainer(byte[] value)
+		{
 			Value = value;
 		}
 
 		private static readonly Encoding Encoding = Encoding.UTF8;
 		public byte[] Value { get; private set; }
 
-		public string ValueString {
+		public string ValueString
+		{
 			get => Encoding.GetString(Value);
 			private set => Value = Encoding.GetBytes(value);
 		}
 
-		public void ExecuteProcessStep(ProcessingStep processStep) {
-			switch (processStep) {
+		public void ExecuteProcessStep(ProcessingStep processStep)
+		{
+			switch (processStep)
+			{
 				case ProcessingStep.DecodeBase64:
 					DecodeBase64();
 					break;
@@ -37,6 +47,9 @@ namespace JsonXmlUtils {
 					break;
 				case ProcessingStep.EncodeXml:
 					EncodeXml();
+					break;
+				case ProcessingStep.ButifyXml:
+					ButifyXml();
 					break;
 				case ProcessingStep.ButifyJson:
 					ButifyJson();
@@ -56,40 +69,76 @@ namespace JsonXmlUtils {
 			}
 		}
 
-		private void UrlEncode() {
+		private void UrlEncode()
+		{
 			ValueString = WebUtility.UrlEncode(ValueString);
 		}
 
-		private void UrlDecode() {
+		private void UrlDecode()
+		{
 			ValueString = WebUtility.UrlDecode(ValueString);
 		}
 
-		private void HtmlEncode() {
+		private void HtmlEncode()
+		{
 			ValueString = WebUtility.HtmlEncode(ValueString);
 		}
 
-		private void HtmlDecode() {
+		private void HtmlDecode()
+		{
 			ValueString = WebUtility.HtmlDecode(ValueString);
 		}
 
-		private void DecodeBase64() {
+		private void DecodeBase64()
+		{
 			Value = Convert.FromBase64String(ValueString);
 		}
 
-		private void EncodeBase64() {
+		private void EncodeBase64()
+		{
 			ValueString = Convert.ToBase64String(Value);
 		}
 
-		private void DecodeXml() {
+		private void DecodeXml()
+		{
 			ValueString = ValueString.Replace("&amp;", "&").Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&apos;", "'");
 		}
 
-		private void EncodeXml() {
+		private void EncodeXml()
+		{
 			ValueString = ValueString.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&apos;");
 		}
 
-		private void ButifyJson() {
-			ValueString = JToken.Parse(ValueString).ToString(Formatting.Indented);
+		private void ButifyXml()
+		{
+			XmlDocument document = new XmlDocument();
+			document.Load(new StringReader(ValueString));
+
+			using (MemoryStream memoryStream = new MemoryStream())
+			using (XmlTextWriter writer = new XmlTextWriter(memoryStream, Encoding.UTF8))
+			{
+				writer.Formatting = System.Xml.Formatting.Indented;
+				writer.Indentation = 4;
+				document.Save(writer);
+
+				writer.Flush();
+				memoryStream.Flush();
+
+				// Have to rewind the MemoryStream in order to read
+				// its contents.
+				memoryStream.Position = 0;
+
+				// Read MemoryStream contents into a StreamReader.
+				StreamReader sReader = new StreamReader(memoryStream);
+
+				// Extract the text from the StreamReader.
+				ValueString = sReader.ReadToEnd();
+			}
+		}
+
+		private void ButifyJson()
+		{
+			ValueString = JToken.Parse(ValueString).ToString(Newtonsoft.Json.Formatting.Indented);
 		}
 	}
 }
